@@ -163,7 +163,34 @@ public class  ExtHash<K,V> {
                 "globaldepth=" + globaldepth +
                 ",\n " + bucketlist + '}';
     }
+    
+    public static void writeTotalInsertTime(String filename, int bucket_size) throws IOException {
+        ExtHash<String, String> eh2 = new ExtHash<String, String>(bucket_size);
+        ArrayList<Long> times = new ArrayList<>();
 
+        Scanner reader = new Scanner(new File("911.csv"));
+        reader.nextLine();
+        String sep = ",";
+        int i = 0;
+        long start = System.nanoTime();
+        
+        while(reader.hasNextLine()) {
+            String [] line = reader.nextLine().split(sep);
+            i++;
+            if(i!=0 && (i-1) % 100000 == 0) {
+                eh2.put(line[2], line[4]);
+                long step = System.nanoTime();
+                times.add(step - start);
+            }else{
+                eh2.put(line[2], line[4]);
+            }
+        }
+
+        PrintWriter pw=new PrintWriter(new FileWriter(filename));
+        pw.println(times.toString());
+        pw.close();
+    }
+    
     public static void writeInsertPerformance(String filename, int bucket_size) throws IOException {
         ExtHash<String, String> eh2 = new ExtHash<String, String>(bucket_size);
         ArrayList<Long> times = new ArrayList<>();
@@ -240,6 +267,9 @@ public class  ExtHash<K,V> {
             writeInsertPerformance(filename, i);
             writeAccessPerformance(afilename, i);
         }
+        
+        // To measure total execution time
+        //writeTotalInsertTime("TotalInsert_time.txt", 500);
     }
 }
 
