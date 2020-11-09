@@ -1,20 +1,25 @@
 // << +1 || >> -1
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.io.*;
 import java.util.Scanner;
 import java.io.FileWriter;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class  ExtHash<K,V> {
     static class Bucket<K, V> {
         int localdepth = 0;
         int size = 0;
-        static int bucket_size = 100;
+        int bucket_size;
         private MyHashMap bucket = new MyHashMap<K, V>(size);
         List<K> keyset = new ArrayList<K>();
+
+        public Bucket(int bucket_size){
+            this.bucket_size = bucket_size;
+        }
 
         public void put(Data<K, V> x) {
             // put data in bucket and create keyset
@@ -47,8 +52,8 @@ public class  ExtHash<K,V> {
     List<Bucket<K, V>> bucketlist = new ArrayList<Bucket<K, V>>();
     int counter = 0;
 
-     public ExtHash() {
-        bucketlist.add(new Bucket<K, V>());
+     public ExtHash(int bucket_size) {
+        bucketlist.add(new Bucket<K, V>(bucket_size));
     }
 
      public static <K> String hashcode(K k) {
@@ -62,10 +67,6 @@ public class  ExtHash<K,V> {
      public Bucket<K, V> getBucket(K key) { // get bucket based on hashcode(key)
         String hashcode = hashcode(key);
         BigInteger hd = new BigInteger(hashcode);
-        //System.out.println(hd & (1 << globaldepth.get()) - 1);
-        //System.out.println(hd);
-        //Bucket<K,V> b = bucketlist.get((int) (hd & (1 << globaldepth.get()) - 1));
-        //System.out.println(hd);
         hd = (hd.and(BigInteger.valueOf(1 << globaldepth.get()).subtract(BigInteger.valueOf(1))));
         //System.out.println(hd);
         Bucket<K, V> b = bucketlist.get(hd.intValue());
@@ -112,18 +113,14 @@ public class  ExtHash<K,V> {
             Data<K, V> d = new Data<K, V>(key, value);
             b.put(d);
             //split data of bucket b to buckets b1 and b2
-            Bucket<K, V> b1 = new Bucket<K, V>();
-            Bucket<K, V> b2 = new Bucket<K, V>();
+            Bucket<K, V> b1 = new Bucket<K, V>(b.bucket_size);
+            Bucket<K, V> b2 = new Bucket<K, V>(b.bucket_size);
 
             //System.out.println(b.keyset);
 
             for (K key2 : b.keyset) {
                 V value2 = (V) b.bucket.getData(key2);
                 Data<K, V> d2 = new Data<K, V>(key2, value2);
-
-                //long hd = Long.parseLong(hashcode(key2));
-                //int hashcode =(int) (hd & ((1 << globaldepth.get())) - 1);
-
                 String hashcode = hashcode(key2);
                 BigInteger hd = new BigInteger(hashcode);
                 hd = (hd.and(BigInteger.valueOf(1 << globaldepth.get()).subtract(BigInteger.valueOf(1))));
@@ -167,44 +164,82 @@ public class  ExtHash<K,V> {
                 ",\n " + bucketlist + '}';
     }
 
-    public int countElements(){
-        for(int i=0; i<bucketlist.size(); i++){
-                counter += bucketlist.get(i).keyset.size();
-            }
-        return counter;
-        }
-
-    public static void main(String[] args) throws IOException, InterruptedException {
-        //this example is from anadiotis slides..
-        //when we have the dataset we can split it to as many threads we want
-        //we have to test the code a bit more
-        //overleaf (?)
-
-        ExtHash<String, String> eh2 = new ExtHash<String, String>();
+    public static void writeInsertPerformance(String filename, int bucket_size) throws IOException {
+        ExtHash<String, String> eh2 = new ExtHash<String, String>(bucket_size);
         ArrayList<Long> times = new ArrayList<>();
 
         Scanner reader = new Scanner(new File("911.csv"));
-        // Skip the 2 first lines
-        //reader.nextLine();
-        //reader.nextLine();
+        reader.nextLine();
         String sep = ",";
+        int i = 0;
 
         while(reader.hasNextLine()) {
             String [] line = reader.nextLine().split(sep);
-            long start = System.nanoTime();
-            eh2.put(line[2], line[4]);
-            eh2.getValue(line[2]);
-            long finish = System.nanoTime();
-            times.add(finish - start);
+            i++;
+            if((i-1) % 5000 == 0) {
+                MemoryMXBean mbean = ManagementFactory.getMemoryMXBean();
+                System.gc();
+                //MemoryUsage start = mbean.getHeapMemoryUsage();
+                long start = System.nanoTime();
+                eh2.put(line[2], line[4]);
+                long finish = System.nanoTime();
+                //System.gc();
+                //MemoryUsage finish = mbean.getHeapMemoryUsage();
+                //long memory = finish.getUsed() - start.getUsed();
+                times.add(finish - start);
+            }else{
+                eh2.put(line[2], line[4]);
+            }
         }
-        //System.out.println("Time=" + times);
 
-        FileWriter writer = new FileWriter("Access911Bsize100.txt");
-        writer.write("Time=" + times);
-        writer.close();
-        //System.out.println(eh2);
-        //System.out.println(eh2.getValue("\"Metadata for Digital Media: Introduction to the Special Issue\""));
-        //System.out.println("Insertion "+linetype+" finished");
+        PrintWriter pw=new PrintWriter(new FileWriter(filename));
+        pw.println(times.toString());
+        pw.close();
+    }
+
+    public static void writeAccessPerformance(String filename, int bucket_size) throws IOException {
+        ExtHash<String, String> eh2 = new ExtHash<String, String>(bucket_size);
+        ArrayList<Long> times = new ArrayList<>();
+        ArrayList<String> keys = new ArrayList<>();
+
+        Scanner reader = new Scanner(new File("911.csv"));
+        reader.nextLine();
+        String sep = ",";
+        int i = 0;
+
+        while(reader.hasNextLine()) {
+            String [] line = reader.nextLine().split(sep);
+            keys.add(line[2]);
+            eh2.put(line[2], line[4]);
+            i++;
+            if((i-1) % 5000 == 0) {
+                long countTime = 0;
+                int keyIndex = (int)(Math.random() * (i-1));
+                long start = System.nanoTime();
+                eh2.getValue(keys.get(keyIndex));
+                //Runtime runtime = Runtime.getRuntime();
+                //runtime.gc();
+                //long memory = runtime.totalMemory() - runtime.freeMemory();
+                long finish = System.nanoTime();
+                countTime += finish - start;
+                times.add(countTime);
+            }
+        }
+
+        PrintWriter pw = new PrintWriter(new FileWriter(filename));
+        pw.println(times.toString());
+        pw.close();
+    }
+
+    public static void main(String[] args) throws IOException, InterruptedException {
+        int[] bucket_sizes = {25, 100, 500, 1000, 1500};
+
+        for (int i : bucket_sizes) {
+            String filename = "New_Memory_Insertion_" + String.valueOf(i);
+            String afilename = "NewMemoryAccess_" + String.valueOf(i);
+            writeInsertPerformance(filename, i);
+            writeAccessPerformance(afilename, i);
+        }
     }
 }
 
